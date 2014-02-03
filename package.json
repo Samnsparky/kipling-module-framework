@@ -4,6 +4,7 @@
     "description": "Library for making LabJack Kipling modules.",
     "dependencies": {
         "async": "~0.2",
+        "dict": "~1",
         "ljmmm-parse": "~0.1",
         "node.extend": "~1",
         "q": "~1",
