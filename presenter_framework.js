@@ -236,6 +236,11 @@ function Framework() {
      *          be written to the device each time an input box value is
      *          changed.
      *
+     * Note that template and binding can contain LJMMM strings. If they do,
+     * they will automagically be expanded and bound individually. So, template
+     * of analog-#(0:1)-display and binding of AIN#(0:1) will bind
+     * analog-0-display to AIN0 and analog-1-display to AIN1.
+     *
      * @param {Object} newBinding The binding information object (as described
      *      above) that should be registered.
     **/
