@@ -1,3 +1,13 @@
+/**
+ * Automated tests for the presenter framework.
+ *
+ * @author: Chris Johnson (LabJack, 2014)
+ * @author: Sam Pottinger (LabJack, 2014)
+**/
+
+
+var dict = require('dict');
+var q = require('q');
 var rewire = require('rewire');
 
 var presenter_framework = rewire('./presenter_framework.js');
@@ -31,12 +41,21 @@ function TestJQuery() {
 
 function TestDevice() {
     this.writings = [];
+    this.readAddresses = null;
+    this.readResults = [];
 
     this.write = function (register, value) {
         this.writings.push({
             register: register,
             value: value
         });
+    };
+
+    this.readMany = function (addresses) {
+        var deferred = q.defer();
+        this.readAddresses = addresses;
+        deferred.resolve(this.readResults);
+        return deferred.promise;
     };
 }
 
@@ -324,6 +343,55 @@ module.exports = {
         newEvent.listener();
     },
 
+    testStopLoop: function (test) {
+        this.testFramework.runLoop = true;
+        this.testFramework.stopLoop();
+        test.equal(this.testFramework.runLoop, false);
+        test.done();
+    },
+
+    testStartLoop: function (test) {
+        var self = this;
+        this.testFramework.loopIteration = function () {
+            test.ok(self.testFramework.runLoop);
+            test.done();
+        };
+        this.testFramework.startLoop();
+    },
+
+    testLoopIteration: function (test) {
+        var self = this;
+        var testDevice = new TestDevice();
+        testDevice.readResults = [0, 1];
+        self.testFramework._SetSelectedDevices([testDevice]);
+
+        testBinding = {
+            class: 'ain-inputs',
+            template: 'ain-#(0:1)',
+            binding: 'AIN#(0:1)',
+            direction: 'read'
+        };
+        self.testFramework.putConfigBinding(testBinding);
+
+        self.testFramework.runLoop = true;
+        self.testFramework.loopIteration()
+        .then(function () {
+            self.testFramework.stopLoop();
+
+            var update1 = self.testJquery.updates[0];
+            test.notDeepEqual(update1, undefined);
+            test.deepEqual(update1.element, '#ain-0');
+            test.deepEqual(update1.html, 0);
+
+            var update2 = self.testJquery.updates[1];
+            test.notDeepEqual(update2, undefined);
+            test.deepEqual(update2.element, '#ain-1');
+            test.deepEqual(update2.html, 1);
+
+            test.done();
+        });
+    },
+
     testConfigBindingSimpleRead: function (test) {
         testBinding = {
             class: 'ain-inputs',
@@ -334,9 +402,9 @@ module.exports = {
 
         this.testFramework.putConfigBinding(testBinding);
 
-        this.testFramework._OnRead({
+        this.testFramework._OnRead(dict({
             'AIN0': 0
-        });
+        }));
 
         var update = this.testJquery.updates[0];
         test.notDeepEqual(update, undefined);
@@ -355,14 +423,21 @@ module.exports = {
 
         this.testFramework.putConfigBinding(testBinding);
 
-        this.testFramework._OnRead({
-            'AIN0': 0
-        });
+        this.testFramework._OnRead(dict({
+            'AIN0': 0,
+            'AIN1': 1
+        }));
 
-        var update = this.testJquery.updates[0];
-        test.notDeepEqual(update, undefined);
-        test.deepEqual(update.element, '#ain-0');
-        test.deepEqual(update.html, 0);
+        var update1 = this.testJquery.updates[0];
+        test.notDeepEqual(update1, undefined);
+        test.deepEqual(update1.element, '#ain-0');
+        test.deepEqual(update1.html, 0);
+
+        var update2 = this.testJquery.updates[1];
+        test.notDeepEqual(update2, undefined);
+        test.deepEqual(update2.element, '#ain-1');
+        test.deepEqual(update2.html, 1);
+
         test.done();
     },
 

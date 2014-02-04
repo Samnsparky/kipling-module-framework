@@ -5,6 +5,8 @@
     "dependencies": {
         "async": "~0.2",
         "dict": "~1",
+        "handlebars": "~1",
+        "labjack-nodejs": "~0",
         "ljmmm-parse": "~0.1",
         "node.extend": "~1",
         "q": "~1",

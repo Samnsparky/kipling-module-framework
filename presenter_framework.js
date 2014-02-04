@@ -130,6 +130,7 @@ function Framework() {
     this.readBindings = readBindings;
     this.writeBindings = writeBindings;
     this.selectedDevices = selectedDevices;
+    this.runLoop = false;
 
     var self = this;
 
@@ -171,21 +172,39 @@ function Framework() {
      * @param {String} name The name of the event to fire.
      * @param {Object} params Object whose attributes should be used as
      *      parameters for the event.
+     * @param {function} onErr Function to call if an error was encountered
+     *      while running event listeneres. Optional.
+     * @param {function} onSuccess Function to call after the event listeners
+     *      finish running. Optional.
     **/
-    this.fire = function (name, params) {
+    this.fire = function (name, params, onErr, onSuccess) {
+        var noop = function () {};
+
+        if (!onSuccess)
+            onSuccess = noop;
+
+        if (!onErr)
+            onErr = noop;
+
         if (!eventListener.has(name)) {
+            onSuccess();
             return;
         }
 
         var listener = eventListener.get(name);
 
-        if (listener)
-            eventListener.get(name)(params);
+        if (listener !== null) {
+            listener(params, onSuccess, onErr);
+        } else {
+            onSuccess();
+        }
     };
     var fire = this.fire;
 
     /**
      * Set how frequently the framework should read from the device.
+     *
+     * @param {int} newRefreshRate The number of milliseconds between updates.
     **/
     this.setRefreshRate = function (newRefreshRate) {
         self.refreshRate = newRefreshRate;
@@ -247,28 +266,28 @@ function Framework() {
     this.putConfigBinding = function (newBinding) {
 
         if (newBinding['class'] === undefined) {
-            fire('loadError', {'msg': 'Config binding missing class'});
+            self.fire('loadError', {'msg': 'Config binding missing class'});
             return;
         }
 
         if (newBinding['template'] === undefined) {
-            fire('loadError', {'msg': 'Config binding missing template'});
+            self.fire('loadError', {'msg': 'Config binding missing template'});
             return;
         }
 
         if (newBinding['binding'] === undefined) {
-            fire('loadError', {'msg': 'Config binding missing binding'});
+            self.fire('loadError', {'msg': 'Config binding missing binding'});
             return;
         }
 
         if (newBinding['direction'] === undefined) {
-            fire('loadError', {'msg': 'Config binding missing direction'});
+            self.fire('loadError', {'msg': 'Config binding missing direction'});
             return;
         }
 
         var isWrite = newBinding['direction'] === 'write';
         if (isWrite && newBinding['event'] === undefined) {
-            fire('loadError', {'msg': 'Config binding missing direction'});
+            self.fire('loadError', {'msg': 'Config binding missing direction'});
             return;
         }
 
@@ -300,7 +319,7 @@ function Framework() {
                 }
             );
         } else {
-            fire(
+            self.fire(
                 'loadError',
                 {'msg': 'Config binding has invalid direction'}
             );
@@ -360,18 +379,30 @@ function Framework() {
      *      attribute "json" on the rendering context. Namely, context.json will
      *      be set to an object where the attribute is the name of the JSON file
      *      and the value is the JSON loaded from that file.
+     * @param {function} onErr The function to call if an error was encountered
+     *      while rendering the module view. Optional.
+     * @param {function} onSuccess The function to call after the view has been
+     *      rendered.
     **/
-    this.setDeviceView = function (templateLoc, jsonFiles, context) {
+    this.setDeviceView = function (loc, jsonFiles, context, onErr, onSuccess) {
+        var noop = function () {};
+
         if (jsonFiles === undefined)
             jsonFiles = [];
 
         if (context === undefined)
             context = {};
 
+        if (!onErr)
+            onErr = noop;
+
+        if (!onSuccess)
+            onSuccess = noop;
+
         // Create an error handler
-        var fireMethod = this.fire;
         var reportLoadError = function (details) {
-            fireMethod('loadError', {'msg': details});
+            onErr({'msg': details});
+            self.fire('loadError', {'msg': details});
         };
 
         // Load the supporting JSON files for use in the template
@@ -405,7 +436,7 @@ function Framework() {
         // Load the HTML view template and render
         var prepareHTMLTemplate = function () {
             var deferred = q.defer();
-            var fullURI = fs_facade.getExternalURI(templateLoc);
+            var fullURI = fs_facade.getExternalURI(loc);
             context.json = jsonTemplateVals;
             fs_facade.renderTemplate(
                 fullURI,
@@ -418,7 +449,7 @@ function Framework() {
 
         loadJSONFiles()
         .then(prepareHTMLTemplate, reportLoadError)
-        .fail(reportLoadError);
+        .then(onSuccess, reportLoadError);
     };
     var setDeviceView = self.setDeviceView;
 
@@ -449,8 +480,136 @@ function Framework() {
         });
     };
 
-    this.numBindings = function () {
+    /**
+     * Stop the module's refresh loop.
+    **/
+    this.stopLoop = function () {
+        self.runLoop = false;
+    };
+    var stopLoop = this.stopLoop;
 
+    /**
+     * Start the module's refresh loop.
+    **/
+    this.startLoop = function () {
+        self.runLoop = true;
+        self.loopIteration();
+    };
+    var startLoop = this.startLoop;
+
+    /**
+     * Function to run a single iteration of the module's refresh loop.
+     *
+     * @return {q.promise} Promise that resolves after the iteration of the
+     *      refresh loop finishes running. Rejects if an error was encountered
+     *      during the loop iteration.
+    **/
+    this.loopIteration = function () {
+        var deferred = q.defer();
+
+        if (!self.runLoop) {
+            deferred.reject('Loop not running.');
+            return deferred.promise;
+        }
+
+        var reportError = function (details) {
+            console.log(details);
+            self.fire(
+                'refresh',
+                {msg: 'Failed loop iteration.', details: details}
+            );
+            deferred.reject(details);
+        };
+
+        var getNeededAddresses = function () {
+            var innerDeferred = q.defer();
+            var addresses = [];
+
+            self.readBindings.forEach(function (value, key) {
+                addresses.push(value.binding);
+            });
+
+            innerDeferred.resolve(addresses);
+            return innerDeferred.promise;
+        };
+
+        var requestDeviceValues = function (addresses) {
+            var innerDeferred = q.defer();
+            var device = self.getSelectedDevice();
+            
+            device.readMany(addresses)
+            .then(
+                function (values) {
+                    innerDeferred.resolve({
+                        values: values,
+                        addresses: addresses
+                    });
+                },
+                innerDeferred.reject
+            );
+
+            return innerDeferred.promise;
+        };
+
+        var processDeviceValues = function (valuesInfo) {
+            var innerDeferred = q.defer();
+            var values = valuesInfo.values;
+            var addresses = valuesInfo.addresses;
+            var numAddresses = addresses.length;
+            var retDict = dict();
+
+            for (var i=0; i<numAddresses; i++) {
+                retDict.set(addresses[i].toString(), values[i]);
+            }
+
+            innerDeferred.resolve(retDict);
+            return innerDeferred.promise;
+        };
+
+        var alertOn = function (valuesDict) {
+            var innerDeferred = q.defer();
+            self._OnRead(valuesDict);
+            innerDeferred.resolve();
+            return innerDeferred.promise;
+        };
+
+        var alertRefresh = function () {
+            var innerDeferred = q.defer();
+            self.fire(
+                'refresh',
+                self,
+                innerDeferred.reject,
+                innerDeferred.resolve
+            );
+            return innerDeferred.promise;
+        };
+
+        var setTimeout = function () {
+            var innerDeferred = q.defer();
+            //setTimeout(self.loopIteration, 10000);
+            innerDeferred.resolve();
+            return innerDeferred.promise;
+        };
+
+        getNeededAddresses()
+        .then(requestDeviceValues, reportError)
+        .then(processDeviceValues, reportError)
+        .then(alertOn, reportError)
+        .then(alertRefresh, reportError)
+        .then(setTimeout, reportError)
+        .then(deferred.resolve, deferred.reject);
+
+        return deferred.promise;
+    };
+    var loopIteration = this.loopIteration;
+
+    /**
+     * Determine how many bindings have been registered for the module.
+     *
+     * @return {int} The number of bindings registered for this module.
+    **/
+    this.numBindings = function () {
+        return self.bindings.size();
     };
     var numBindings = this.numBindings;
 
@@ -458,7 +617,7 @@ function Framework() {
         var jquery = self.jquery;
         self.readBindings.forEach(function (bindingInfo, template) {
             var bindingName = bindingInfo.binding;
-            var valRead = valueReadFromDevice[bindingName];
+            var valRead = valueReadFromDevice.get(bindingName.toString());
             if (valRead !== undefined) {
                 var jquerySelector = '#' + bindingInfo.template;
                 jquery.html(jquerySelector, valRead);
@@ -468,8 +627,8 @@ function Framework() {
     var _OnRead = _OnRead;
 
     this._OnConfigControlEvent = function (event) {
-        fire('configureDevice', event);
-        fire('deviceConfigured', event);
+        self.fire('configureDevice', event);
+        self.fire('deviceConfigured', event);
     };
     var _OnConfigControlEvent = _OnConfigControlEvent;
 }
