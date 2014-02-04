@@ -69,25 +69,25 @@ module.exports = {
     },
 
     testOn: function (test) {
-        this.testFramework.on('moduleLoad', function() {
+        this.testFramework.on('onModuleLoad', function() {
             test.done();
         });
-        this.testFramework.fire('moduleLoad');
+        this.testFramework.fire('onModuleLoad');
     },
 
     testOnOverwrite: function (test) {
-        this.testFramework.on('moduleLoad', function() {
+        this.testFramework.on('onModuleLoad', function() {
             test.ok(false);
         });
-        this.testFramework.on('moduleLoad', function() {
+        this.testFramework.on('onModuleLoad', function() {
             test.done();
         });
-        this.testFramework.fire('moduleLoad');
+        this.testFramework.fire('onModuleLoad');
 
     },
 
     testOnNonExist: function (test) {
-        this.testFramework.on('loadError', function () {
+        this.testFramework.on('onLoadError', function () {
             test.done();
         });
         this.testFramework.on('something fake', function() {
@@ -117,7 +117,7 @@ module.exports = {
     },
 
     testPutConfigBindingIncomplete: function (test) {
-        this.testFramework.on('loadError', function () {
+        this.testFramework.on('onLoadError', function () {
             test.ok(true);
         });
 
@@ -139,7 +139,7 @@ module.exports = {
     },
 
     testPutConfigBindingInvalidDirection: function (test) {
-        this.testFramework.on('loadError', function () {
+        this.testFramework.on('onLoadError', function () {
             test.ok(true);
         });
 
@@ -161,7 +161,7 @@ module.exports = {
     },
 
     testPutConfigBindingNew: function (test) {
-        this.testFramework.on('loadError', function () {
+        this.testFramework.on('onLoadError', function () {
             test.ok(false);
         });
 
@@ -184,7 +184,7 @@ module.exports = {
     },
 
     testPutConfigBindingExists: function (test) {
-        this.testFramework.on('loadError', function () {
+        this.testFramework.on('onLoadError', function () {
             test.ok(false);
         });
 
@@ -218,7 +218,7 @@ module.exports = {
     },
 
     testDeleteConfigBindingExists: function (test) {
-        this.testFramework.on('loadError', function () {
+        this.testFramework.on('onLoadError', function () {
             test.ok(false);
         });
 
@@ -242,7 +242,7 @@ module.exports = {
     },
 
     testDeleteConfigBindingNotExists: function (test) {
-        this.testFramework.on('loadError', function () {
+        this.testFramework.on('onLoadError', function () {
             test.ok(true);
             test.done();
         });
@@ -252,7 +252,7 @@ module.exports = {
     },
 
     testSetDeviceViewNotFound: function (test) {
-        this.testFramework.on('loadError', function () {
+        this.testFramework.on('onLoadError', function () {
             test.ok(true);
             test.done();
         });
@@ -272,7 +272,7 @@ module.exports = {
     },
 
     testSetDeviceViewWithoutJSON: function (test) {
-        this.testFramework.on('loadError', function (err) {
+        this.testFramework.on('onLoadError', function (err) {
             test.ok(false);
             console.log(err);
         });
@@ -293,7 +293,7 @@ module.exports = {
     },
 
     testSetDeviceViewWithSON: function (test) {
-        this.testFramework.on('loadError', function () {
+        this.testFramework.on('onLoadError', function () {
             test.ok(false);
         });
 
@@ -325,7 +325,7 @@ module.exports = {
     },
 
     testEstablishConfigControlBindings: function (test) {
-        this.testFramework.on('configureDevice', function () {
+        this.testFramework.on('onRegisterWrite', function () {
             test.ok(true);
             test.done();
         });
@@ -445,7 +445,7 @@ module.exports = {
         var testDevice = new TestDevice();
         this.testFramework._SetSelectedDevices([testDevice]);
 
-        this.testFramework.on('deviceConfigured', function () {
+        this.testFramework.on('onRegisterWritten', function () {
             var writeOp = testDevice.writings[0];
             test.deepEqual(writeOp.register, 'DAC0');
             test.deepEqual(writeOp.value, 1);
@@ -476,7 +476,7 @@ module.exports = {
         var testDevice = new TestDevice();
         this.testFramework._SetSelectedDevices([testDevice]);
 
-        this.testFramework.on('deviceConfigured', function () {
+        this.testFramework.on('onRegisterWritten', function () {
             var writeOp = testDevice.writings[0];
             test.deepEqual(writeOp.register, 'DAC0');
             test.deepEqual(writeOp.value, 1);

@@ -100,17 +100,17 @@ function Framework() {
 
     // List of events that the framework handels
     var eventListener = dict({
-        moduleLoad: null,
-        loadTemplate: null,
-        deviceSelection: null,
-        configureDevice: null,
-        deviceConfigured: null,
-        refresh: null,
-        closeDevice: null,
-        unloadModule: null,
-        loadError: null,
-        configError: null,
-        refreshError: null,
+        onModuleLoad: null,
+        onTemplateLoaded: null,
+        onDeviceSelection: null,
+        onRegisterWrite: null,
+        onRegisterWritten: null,
+        onRefresh: null,
+        onCloseDevice: null,
+        onUnloadModule: null,
+        onLoadError: null,
+        onConfigError: null,
+        onRefreshError: null,
         executionError: function (params) { throw params; }
     });
     this.eventListener = eventListener;
@@ -158,7 +158,7 @@ function Framework() {
     **/
     this.on = function (name, listener) {
         if (!eventListener.has(name)) {
-            fire('loadError', {'msg': 'Config binding missing direction'});
+            fire('onLoadError', {'msg': 'Config binding missing direction'});
             return;
         }
 
@@ -238,22 +238,25 @@ function Framework() {
      * or as an HTML element that allows the user to write the value of
      * a device register. This device binding info object should have
      * attributes:
-     *   - {string} class: Description of what type of binding this is. Not used
-     *          in this first release of this framework.
-     *   - {string} template: The ID of the HTML element to bind to. For
-     *          example: ain-0-display or ain-#(0:1)-display
-     *   - {string} binding: The name of the device register to bind to. For
-     *          exmaple: AIN0 or AIN#(0:1).
-     *   - {string} direction: Either "read" for displaying a the value of a
+     *
+     * <ul>
+     *   <li>{string} class: Description of what type of binding this is. Not
+     *          used in this first release of this framework.</li>
+     *   <li>{string} template: The ID of the HTML element to bind to. For
+     *          example: ain-0-display or ain-#(0:1)-display.</li>
+     *   <li>{string} binding: The name of the device register to bind to. For
+     *          exmaple: AIN0 or AIN#(0:1).</li>
+     *   <li>{string} direction: Either "read" for displaying a the value of a
      *          device register or "write" for having an HTML element set the
      *          value of a device register. May also be "hybrid" which will
      *          first read the current value of a register, display that, and
      *          then update the value of that register on subsequent updates
-     *          from within the view.
-     *   - {string} event: The name of the event to bind to. Only required if
+     *          from within the view.</li>
+     *   <li>{string} event: The name of the event to bind to. Only required if
      *          write or hybrid. For example, "change" would cause the value to
      *          be written to the device each time an input box value is
-     *          changed.
+     *          changed.</li>
+     * </ul>
      *
      * Note that template and binding can contain LJMMM strings. If they do,
      * they will automagically be expanded and bound individually. So, template
@@ -266,28 +269,43 @@ function Framework() {
     this.putConfigBinding = function (newBinding) {
 
         if (newBinding['class'] === undefined) {
-            self.fire('loadError', {'msg': 'Config binding missing class'});
+            self.fire(
+                'onLoadError',
+                {'msg': 'Config binding missing class'}
+            );
             return;
         }
 
         if (newBinding['template'] === undefined) {
-            self.fire('loadError', {'msg': 'Config binding missing template'});
+            self.fire(
+                'onLoadError',
+                {'msg': 'Config binding missing template'}
+            );
             return;
         }
 
         if (newBinding['binding'] === undefined) {
-            self.fire('loadError', {'msg': 'Config binding missing binding'});
+            self.fire(
+                'onLoadError',
+                {'msg': 'Config binding missing binding'}
+            );
             return;
         }
 
         if (newBinding['direction'] === undefined) {
-            self.fire('loadError', {'msg': 'Config binding missing direction'});
+            self.fire(
+                'onLoadError',
+                {'msg': 'Config binding missing direction'}
+            );
             return;
         }
 
         var isWrite = newBinding['direction'] === 'write';
         if (isWrite && newBinding['event'] === undefined) {
-            self.fire('loadError', {'msg': 'Config binding missing direction'});
+            self.fire(
+                'onLoadError',
+                {'msg': 'Config binding missing direction'}
+            );
             return;
         }
 
@@ -311,16 +329,16 @@ function Framework() {
                 jquerySelector,
                 newBinding.event,
                 function (event) {
-                    self.fire('configureDevice', event);
+                    self.fire('onRegisterWrite', event);
                     var newVal = jquery.val(jquerySelector);
                     var device = getSelectedDevice();
                     device.write(newBinding.binding, newVal);
-                    self.fire('deviceConfigured', event);
+                    self.fire('onRegisterWritten', event);
                 }
             );
         } else {
             self.fire(
-                'loadError',
+                'onLoadError',
                 {'msg': 'Config binding has invalid direction'}
             );
         }
@@ -344,7 +362,7 @@ function Framework() {
 
         if (!self.bindings.has(bindingName)) {
             self.fire(
-                'loadError',
+                'onLoadError',
                 {'msg': 'No binding for ' + bindingName}
             );
             return;
@@ -362,7 +380,7 @@ function Framework() {
             jquery.off(jquerySelector, bindingInfo.event);
         } else {
             self.fire(
-                'loadError',
+                'onLoadError',
                 {'msg': 'Config binding has invalid direction'}
             );
         }
@@ -402,7 +420,7 @@ function Framework() {
         // Create an error handler
         var reportLoadError = function (details) {
             onErr({'msg': details});
-            self.fire('loadError', {'msg': details});
+            self.fire('onLoadError', {'msg': details});
         };
 
         // Load the supporting JSON files for use in the template
@@ -513,9 +531,8 @@ function Framework() {
         }
 
         var reportError = function (details) {
-            console.log(details);
             self.fire(
-                'refresh',
+                'onRefresh',
                 {msg: 'Failed loop iteration.', details: details}
             );
             deferred.reject(details);
@@ -576,7 +593,7 @@ function Framework() {
         var alertRefresh = function () {
             var innerDeferred = q.defer();
             self.fire(
-                'refresh',
+                'onRefresh',
                 self,
                 innerDeferred.reject,
                 innerDeferred.resolve
@@ -627,8 +644,8 @@ function Framework() {
     var _OnRead = _OnRead;
 
     this._OnConfigControlEvent = function (event) {
-        self.fire('configureDevice', event);
-        self.fire('deviceConfigured', event);
+        self.fire('onRegisterWrite', event);
+        self.fire('onRegisterWritten', event);
     };
     var _OnConfigControlEvent = _OnConfigControlEvent;
 }
