@@ -21,7 +21,7 @@ DEFAULT_REFRESH_RATE = 1000;
  *
  * Creates a new binding info object, a structure with all of the information
  * necessary to bind a piece of the module GUI to a register / registers on
- * a LabJack device. THis will copy the "metadata" from an existing binding
+ * a LabJack device. This will copy the "metadata" from an existing binding
  * into a new one. Namely, it will re-use original's class, direction, and
  * event attributes but add in new binding and template values.
  * 
@@ -101,17 +101,18 @@ function Framework() {
     // List of events that the framework handels
     var eventListener = dict({
         onModuleLoad: null,
-        onTemplateLoaded: null,
         onDeviceSelection: null,
+        onTemplateLoaded: null,
         onRegisterWrite: null,
         onRegisterWritten: null,
         onRefresh: null,
+        onRefreshed: null,
         onCloseDevice: null,
         onUnloadModule: null,
         onLoadError: null,
         onConfigError: null,
         onRefreshError: null,
-        executionError: function (params) { throw params; }
+        onExecutionError: function (params) { throw params; }
     });
     this.eventListener = eventListener;
 
@@ -158,7 +159,11 @@ function Framework() {
     **/
     this.on = function (name, listener) {
         if (!eventListener.has(name)) {
-            fire('onLoadError', {'msg': 'Config binding missing direction'});
+            self.fire(
+                'onLoadError',
+                [ 'Config binding missing direction' ],
+                function (shouldContinue) { self.runLoop = shouldContinue; }
+            );
             return;
         }
 
@@ -180,6 +185,9 @@ function Framework() {
     this.fire = function (name, params, onErr, onSuccess) {
         var noop = function () {};
 
+        if (!params)
+            params = [];
+
         if (!onSuccess)
             onSuccess = noop;
 
@@ -194,7 +202,12 @@ function Framework() {
         var listener = eventListener.get(name);
 
         if (listener !== null) {
-            listener(params, onSuccess, onErr);
+            var passParams = [];
+            passParams.push(self);
+            passParams.push.apply(passParams, params)
+            passParams.push(onErr);
+            passParams.push(onSuccess);
+            listener.apply(null, passParams);
         } else {
             onSuccess();
         }
@@ -267,11 +280,15 @@ function Framework() {
      *      above) that should be registered.
     **/
     this.putConfigBinding = function (newBinding) {
+        var onErrorHandle = function (shouldContinue) {
+            self.runLoop = shouldContinue;
+        }
 
         if (newBinding['class'] === undefined) {
             self.fire(
                 'onLoadError',
-                {'msg': 'Config binding missing class'}
+                [ 'Config binding missing class' ],
+                onErrorHandle
             );
             return;
         }
@@ -279,7 +296,8 @@ function Framework() {
         if (newBinding['template'] === undefined) {
             self.fire(
                 'onLoadError',
-                {'msg': 'Config binding missing template'}
+                [ 'Config binding missing template' ],
+                onErrorHandle
             );
             return;
         }
@@ -287,7 +305,8 @@ function Framework() {
         if (newBinding['binding'] === undefined) {
             self.fire(
                 'onLoadError',
-                {'msg': 'Config binding missing binding'}
+                [ 'Config binding missing binding' ],
+                onErrorHandle
             );
             return;
         }
@@ -295,7 +314,8 @@ function Framework() {
         if (newBinding['direction'] === undefined) {
             self.fire(
                 'onLoadError',
-                {'msg': 'Config binding missing direction'}
+                [ 'Config binding missing direction' ],
+                onErrorHandle
             );
             return;
         }
@@ -304,7 +324,8 @@ function Framework() {
         if (isWrite && newBinding['event'] === undefined) {
             self.fire(
                 'onLoadError',
-                {'msg': 'Config binding missing direction'}
+                [ 'Config binding missing direction' ],
+                onErrorHandle
             );
             return;
         }
@@ -328,22 +349,64 @@ function Framework() {
             jquery.on(
                 jquerySelector,
                 newBinding.event,
-                function (event) {
-                    self.fire('onRegisterWrite', event);
-                    var newVal = jquery.val(jquerySelector);
-                    var device = getSelectedDevice();
-                    device.write(newBinding.binding, newVal);
-                    self.fire('onRegisterWritten', event);
-                }
+                function () { self._writeToDevice(newBinding); }
             );
         } else {
             self.fire(
                 'onLoadError',
-                {'msg': 'Config binding has invalid direction'}
+                [ 'Config binding has invalid direction' ],
+                onErrorHandle
             );
         }
     };
     var putConfigBinding = this.putConfigBinding;
+
+    this._writeToDevice = function (bindingInfo) {
+        var jquerySelector = '#' + bindingInfo.template;
+        var newVal = self.jquery.val(jquerySelector);
+
+        var alertRegisterWrite = function () {
+            var innerDeferred = q.defer();
+            self.fire(
+                'onRegisterWrite',
+                [
+                    bindingInfo.binding,
+                    newVal
+                ],
+                innerDeferred.reject,
+                innerDeferred.resolve
+            );
+            return innerDeferred.promise;
+        };
+
+        var writeToDevice = function () {
+            var innerDeferred = q.defer();
+            var device = self.getSelectedDevice();
+            device.write(bindingInfo.binding, newVal);
+            innerDeferred.resolve();
+            return innerDeferred.promise;
+        }
+
+        var alertRegisterWritten = function () {
+            var innerDeferred = q.defer();
+            self.fire(
+                'onRegisterWritten',
+                [
+                    bindingInfo.binding,
+                    newVal
+                ],
+                innerDeferred.reject,
+                innerDeferred.resolve
+            );
+            return innerDeferred.promise;
+        };
+
+        var deferred = q.defer();
+        alertRegisterWrite()
+        .then(writeToDevice, deferred.reject)
+        .then(alertRegisterWritten, deferred.reject)
+        .then(deferred.resolve, deferred.reject);
+    }
 
     /**
      * Delete a previously added configuration binding.
@@ -363,7 +426,8 @@ function Framework() {
         if (!self.bindings.has(bindingName)) {
             self.fire(
                 'onLoadError',
-                {'msg': 'No binding for ' + bindingName}
+                [ 'No binding for ' + bindingName ],
+                function (shouldContinue) { self.runLoop = shouldContinue; }
             );
             return;
         }
@@ -381,7 +445,8 @@ function Framework() {
         } else {
             self.fire(
                 'onLoadError',
-                {'msg': 'Config binding has invalid direction'}
+                [ 'Config binding has invalid direction' ],
+                function (shouldContinue) { self.runLoop = shouldContinue; }
             );
         }
     };
@@ -420,7 +485,11 @@ function Framework() {
         // Create an error handler
         var reportLoadError = function (details) {
             onErr({'msg': details});
-            self.fire('onLoadError', {'msg': details});
+            self.fire(
+                'onLoadError',
+                [ details ],
+                function (shouldContinue) { self.runLoop = shouldContinue; }
+            );
         };
 
         // Load the supporting JSON files for use in the template
@@ -532,8 +601,9 @@ function Framework() {
 
         var reportError = function (details) {
             self.fire(
-                'onRefresh',
-                {msg: 'Failed loop iteration.', details: details}
+                'onRefreshError',
+                [ 'Failed loop iteration.' ],
+                function (shouldContinue) { self.runLoop = shouldContinue; }
             );
             deferred.reject(details);
         };
@@ -547,6 +617,17 @@ function Framework() {
             });
 
             innerDeferred.resolve(addresses);
+            return innerDeferred.promise;
+        };
+
+        var alertRefresh = function (addresses) {
+            var innerDeferred = q.defer();
+            self.fire(
+                'onRefresh',
+                [ addresses ],
+                innerDeferred.reject,
+                function () { innerDeferred.resolve(addresses); }
+            );
             return innerDeferred.promise;
         };
 
@@ -586,17 +667,17 @@ function Framework() {
         var alertOn = function (valuesDict) {
             var innerDeferred = q.defer();
             self._OnRead(valuesDict);
-            innerDeferred.resolve();
+            innerDeferred.resolve(valuesDict);
             return innerDeferred.promise;
         };
 
-        var alertRefresh = function () {
+        var alertRefreshed = function (valuesDict) {
             var innerDeferred = q.defer();
             self.fire(
-                'onRefresh',
-                self,
+                'onRefreshed',
+                [ valuesDict ],
                 innerDeferred.reject,
-                innerDeferred.resolve
+                function () { innerDeferred.resolve(); }
             );
             return innerDeferred.promise;
         };
@@ -609,10 +690,11 @@ function Framework() {
         };
 
         getNeededAddresses()
+        .then(alertRefresh, reportError)
         .then(requestDeviceValues, reportError)
         .then(processDeviceValues, reportError)
         .then(alertOn, reportError)
-        .then(alertRefresh, reportError)
+        .then(alertRefreshed, reportError)
         .then(setTimeout, reportError)
         .then(deferred.resolve, deferred.reject);
 
@@ -644,8 +726,8 @@ function Framework() {
     var _OnRead = _OnRead;
 
     this._OnConfigControlEvent = function (event) {
-        self.fire('onRegisterWrite', event);
-        self.fire('onRegisterWritten', event);
+        self.fire('onRegisterWrite', [event]);
+        self.fire('onRegisterWritten', [event]);
     };
     var _OnConfigControlEvent = _OnConfigControlEvent;
 }

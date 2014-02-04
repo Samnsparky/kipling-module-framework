@@ -100,6 +100,15 @@ module.exports = {
         test.done();
     },
 
+    testFire: function (test) {
+        this.testFramework.on('onModuleLoad', function (framework, arg1, arg2) {
+            test.deepEqual(arg1, 'test1');
+            test.deepEqual(arg2, 'test2');
+            test.done();
+        });
+        this.testFramework.fire('onModuleLoad', ['test1', 'test2']);
+    },
+
     testSetRefreshRate: function (test) {
         this.testFramework.setRefreshRate(2000);
         test.equal(this.testFramework.refreshRate, 2000);
@@ -373,23 +382,29 @@ module.exports = {
         };
         self.testFramework.putConfigBinding(testBinding);
 
+        self.testFramework.on('onRefreshed',
+            function (framework, valuesDict, onError, onSuccess) {
+                self.testFramework.stopLoop();
+
+                var update1 = self.testJquery.updates[0];
+                test.notDeepEqual(update1, undefined);
+                test.deepEqual(update1.element, '#ain-0');
+                test.deepEqual(update1.html, 0);
+
+                var update2 = self.testJquery.updates[1];
+                test.notDeepEqual(update2, undefined);
+                test.deepEqual(update2.element, '#ain-1');
+                test.deepEqual(update2.html, 1);
+
+                test.equal(valuesDict.get('AIN0'), 0);
+                test.equal(valuesDict.get('AIN1'), 1);
+
+                onSuccess();
+            }
+        );
+
         self.testFramework.runLoop = true;
-        self.testFramework.loopIteration()
-        .then(function () {
-            self.testFramework.stopLoop();
-
-            var update1 = self.testJquery.updates[0];
-            test.notDeepEqual(update1, undefined);
-            test.deepEqual(update1.element, '#ain-0');
-            test.deepEqual(update1.html, 0);
-
-            var update2 = self.testJquery.updates[1];
-            test.notDeepEqual(update2, undefined);
-            test.deepEqual(update2.element, '#ain-1');
-            test.deepEqual(update2.html, 1);
-
-            test.done();
-        });
+        self.testFramework.loopIteration().then(test.done);
     },
 
     testConfigBindingSimpleRead: function (test) {
