@@ -5,6 +5,7 @@ Framework making Kipling modules easier to developer.
 ##Creating Custom Module's:
 ##### List of Tutorials:
 [Tutorial #1](#tutorial-1): Generic Module
+
 ### Tutorial #1 
 This tutorial outlines the generic process for creating a generic, no-frills, module.  Any new module should follow these basic steps to create a new module. 
 
@@ -14,7 +15,8 @@ This tutorial outlines the generic process for creating a generic, no-frills, mo
 
  ```javascript
  {
-   "name":"[computer_readable_module_name]"
+   "name":"[computer_readable_module_name]",
+   "active": true
  }
  ```
 
@@ -74,7 +76,8 @@ This tutorial outlines the generic process for creating a generic, no-frills, mo
  </div>
  ```
 
-
+### Tutorial #2
+This tutorial outlines the creation of a module that uses radio buttons to switch between currently open devices.
  
 
 
