@@ -13,7 +13,8 @@ var ljmmm_parse = require('ljmmm-parse');
 
 var fs_facade = require('./fs_facade');
 
-DEFAULT_REFRESH_RATE = 1000;
+var DEFAULT_REFRESH_RATE = 1000;
+var DEVICE_VIEW_TARGET = '#device-view';
 
 
 /**
@@ -534,8 +535,16 @@ function Framework() {
             return deferred.promise;
         };
 
+        var injectHTMLTemplate = function (htmlContents) {
+            var deferred = q.defer();
+            $(DEVICE_VIEW_TARGET).html(htmlContents);
+            deferred.resolve();
+            return deferred.promise;
+        };
+
         loadJSONFiles()
         .then(prepareHTMLTemplate, reportLoadError)
+        .then(injectHTMLTemplate, reportLoadError)
         .then(onSuccess, reportLoadError);
     };
     var setDeviceView = self.setDeviceView;
