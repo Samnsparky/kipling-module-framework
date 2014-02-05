@@ -16,6 +16,24 @@ var fs_facade = require('./fs_facade');
 var DEFAULT_REFRESH_RATE = 1000;
 var DEVICE_VIEW_TARGET = '#device-view';
 
+function JQueryWrapper (origJQuery) {
+    this.html = function (selector, newHTML) {
+        $(selector).html(newHTML);
+    };
+
+    this.on = function (selector, event, listener) {
+        $(selector).on(event, listener);
+    };
+
+    this.find = function (selector) {
+        return $(selector);
+    };
+
+    this.val = function (selector) {
+        return $(selector).val();
+    };
+}
+
 
 /**
  * Creates a new binding info object with the metadata copied from another.
@@ -537,17 +555,61 @@ function Framework() {
 
         var injectHTMLTemplate = function (htmlContents) {
             var deferred = q.defer();
-            $(DEVICE_VIEW_TARGET).html(htmlContents);
+            self.jquery.html(DEVICE_VIEW_TARGET, htmlContents);
             deferred.resolve();
             return deferred.promise;
+        };
+
+        var attachListeners = function () {
+            self.jquery.on(
+                '.device-selection-radio',
+                'click',
+                self._changeSelectedDeviceUI
+            );
+            self.jquery.find('.device-selection-radio').first().prop(
+                'checked', true);
         };
 
         loadJSONFiles()
         .then(prepareHTMLTemplate, reportLoadError)
         .then(injectHTMLTemplate, reportLoadError)
+        .then(attachListeners, reportLoadError)
         .then(onSuccess, reportLoadError);
     };
     var setDeviceView = self.setDeviceView;
+
+    this._changeSelectedDeviceUI = function () {
+        var selectedCheckboxes = $('.device-selection-radio:checked');
+
+        var handleError = function (err) {
+            this.fire(
+                'onLoadError',
+                [
+                    self,
+                    err,
+                    function (shouldContinue) { self.runLoop = shouldContinue; }
+                ]
+            );
+        }
+
+        var selectedDevices = $('.device-selection-radio:checked').map(
+            function () {
+                var numDevices = devices.length;
+                var serial = this.id.replace('-selector', '');
+                for (var i=0; i<numDevices; i++) {
+                    if (devices[i].getSerial() === serial)
+                        return devices[i];
+                }
+                return null;
+            }
+        );
+        this._SetSelectedDevices([selectedDevices[0]]);
+
+        this.fire(
+            'onDeviceSelection',
+            [self, handleError, function () {}]
+        );
+    };
 
     /**
      * Get the currently selected device.

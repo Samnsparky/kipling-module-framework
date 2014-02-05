@@ -36,6 +36,17 @@ function TestJQuery() {
         return this.nextSerials;
     };
 
+    this.find = function (selector) {
+        return {
+            'first': function () {
+                return {
+                    'prop': function (property, defaultVal) {
+                        return defaultVal;
+                    }
+                }
+            }
+        };
+    };
 }
 
 
